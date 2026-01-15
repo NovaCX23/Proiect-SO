@@ -5,7 +5,7 @@
 #include <sys/wait.h>
 #include <string.h>
 
-int main()
+int main(int argc, char **argv)
 {
     // 1. Inițializare
     if (my_init() != 0)
@@ -13,6 +13,19 @@ int main()
         return 1;
     }
     printf("Memorie inițializată. Start teste...\n");
+
+    if (argc > 1 && strcmp(argv[1], "child") == 0)
+    {
+        printf("[Copil-Exec] Încearcă să aloce memorie...\n");
+        char *s = (char *)my_malloc(120);
+        if (s)
+        {
+            strcpy(s, "Salut din procesul copil (exec)!");
+            printf("[Copil-Exec] Scris în memorie: '%s'\n", s);
+            my_free(s);
+        }
+        return 0;
+    }
 
     // 2. Test Simplu (Student 1 & 2 verifică funcționalitatea de bază)
     printf("\n--- Test 1: Alocare simplă ---\n");
@@ -33,15 +46,13 @@ int main()
 
     if (pid == 0)
     {
-        // --- PROCES COPIL ---
-        // Student 1: Arată că procesul copil poate aloca
         printf("[Copil] Încearcă să aloce memorie...\n");
         char *s = (char *)my_malloc(100);
         if (s)
         {
             strcpy(s, "Salut din procesul copil!");
             printf("[Copil] Scris în memorie: '%s'\n", s);
-            sleep(1); // Simulăm o procesare
+            sleep(1);
             my_free(s);
             printf("[Copil] Memorie eliberată.\n");
         }
@@ -49,8 +60,6 @@ int main()
     }
     else if (pid > 0)
     {
-        // --- PROCES PĂRINTE ---
-        // Student 2: Arată că părintele poate aloca simultan
         printf("[Părinte] Încearcă să aloce memorie...\n");
         char *p = (char *)my_malloc(50);
         if (p)
@@ -60,8 +69,33 @@ int main()
             my_free(p);
         }
 
-        wait(NULL); // Așteptăm copilul
+        wait(NULL);
         printf("[Părinte] Copilul a terminat.\n");
+    }
+    else
+    {
+        perror("Fork failed");
+    }
+
+    printf("\n--- Test 2b: Concurență (Procese cu exec) ---\n");
+    pid_t pid2 = fork();
+    if (pid2 == 0)
+    {
+        execl(argv[0], argv[0], "child", NULL);
+        perror("Exec failed");
+        exit(1);
+    }
+    else if (pid2 > 0)
+    {
+        char *p = (char *)my_malloc(80);
+        if (p)
+        {
+            strcpy(p, "Salut din părinte (exec)! ");
+            printf("[Părinte] Scris în memorie: '%s'\n", p);
+            my_free(p);
+        }
+        wait(NULL);
+        printf("[Părinte] Copilul (exec) a terminat.\n");
     }
     else
     {
@@ -84,6 +118,21 @@ int main()
 
     printf("După eliberare totală:\n");
     debug_print_heap();
+
+    // 5. Test Realloc
+    printf("\n--- Test 4: Realloc ---\n");
+    char *r = (char *)my_malloc(16);
+    if (r)
+    {
+        strcpy(r, "ABC");
+        r = (char *)my_realloc(r, 128);
+        if (r)
+        {
+            strcat(r, "DEF");
+            printf("Realloc OK: %s\n", r);
+            my_free(r);
+        }
+    }
 
     return 0;
 }
