@@ -6,12 +6,12 @@ Acest proiect implementează o bibliotecă de gestionare a memoriei (alocator) c
 
 Proiectul a fost realizat de o echipă de 2 studenți, cu responsabilități împărțite astfel:
 
-### Student 1: Infrastructură și Alocare
+### Student 1 (Christian): Infrastructură și Alocare
 
 - **Inițializare (`my_init`)**: Configurarea memoriei partajate folosind `shm_open` + `mmap` și inițializarea mecanismelor de sincronizare (Mutex).
 - **Alocare (`my_malloc`)**: Implementarea algoritmului **First Fit** pentru găsirea blocurilor libere și logica de **Split** (împărțirea unui bloc mare în două mai mici).
 
-### Student 2: Gestionare și Optimizare
+### Student 2 (Eduard): Gestionare și Optimizare
 
 - **Eliberare (`my_free`)**: Implementarea logicii de marcare a blocurilor ca libere și algoritmul de **Coalescing** (unirea blocurilor libere adiacente pentru a reduce fragmentarea).
 - **Realocare (`my_realloc`)**: Redimensionarea blocurilor de memorie (alocare nouă + copiere date + eliberare veche).
@@ -22,7 +22,7 @@ Proiectul a fost realizat de o echipă de 2 studenți, cu responsabilități îm
 
 - `allocator.h` - Fișierul header. Conține definițiile structurilor de date (`Block`, `SharedMemory`) și semnăturile funcțiilor.
 - `allocator.c` - Implementarea efectivă a bibliotecii. Aici se află logica de gestionare a listei dublu înlănțuite de blocuri de memorie.
-- `main.c` - Fișierul de testare. Conține scenarii care demonstrează funcționalitatea bibliotecii (alocare simplă, concurență între procese, coalescing).
+- `tests.c` - Teste automate pentru funcționalitatea bibliotecii (alocare, realloc, coalescing, multi-proces).
 
 ---
 
@@ -39,20 +39,10 @@ Proiectul a fost realizat de o echipă de 2 studenți, cu responsabilități îm
 Deoarece folosim thread-uri (pentru mutex) și avem mai multe fișiere sursă, compilarea se face astfel:
 
 ```bash
-gcc -o proiect main.c allocator.c -pthread
-```
-
-Program de teste separat:
-
-```bash
 gcc -o tests tests.c allocator.c -pthread
 ```
 
 Rulare:
-
-```bash
-./proiect
-```
 
 Rulare teste:
 
@@ -62,7 +52,7 @@ Rulare teste:
 
 ---
 
-## 🧪 Scenarii de Testare (în main.c)
+## 🧪 Scenarii de Testare (în tests.c)
 
 1.  **Test Alocare Simplă**: Verifică dacă putem aloca și scrie într-un vector de int-uri.
 2.  **Test Concurență**: Creează un proces copil cu `fork()`. Atât părintele cât și copilul alocă memorie simultan și scriu date, demonstrând că mutex-ul protejează corect structurile.
