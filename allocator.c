@@ -1,103 +1,29 @@
 #include "allocator.h"
-#include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <string.h>
+#include <errno.h>
 
+// Variabila globala (dar va fi mapata in memoria partajata)
 static void *heap_start = NULL;
 static SharedMemory *shm_info = NULL;
 
-static Block *offset_to_block(size_t offset)
-{
-    if (offset == OFFSET_NULL)
-        return NULL;
-    return (Block *)((char *)heap_start + offset);
-}
+// =============================================================
+//  Initializare și Alocare
+// =============================================================
 
-static size_t block_to_offset(Block *block)
-{
-    if (!block)
-        return OFFSET_NULL;
-    return (size_t)((char *)block - (char *)heap_start);
-}
-
-static int lock_mutex()
-{
-    int rc = pthread_mutex_lock(&shm_info->mutex);
-#ifdef EOWNERDEAD
-    if (rc == EOWNERDEAD)
-    {
-        pthread_mutex_consistent(&shm_info->mutex);
-        return 0;
-    }
-#endif
-    return rc;
-}
-
-static void init_shared_memory()
-{
-    memset(shm_info, 0, sizeof(SharedMemory));
-
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
-#ifdef PTHREAD_MUTEX_ROBUST
-    pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);
-#endif
-    pthread_mutex_init(&shm_info->mutex, &attr);
-    pthread_mutexattr_destroy(&attr);
-
-    size_t start_offset = ALIGN(sizeof(SharedMemory));
-    shm_info->start_block_offset = start_offset;
-
-    Block *first_block = offset_to_block(start_offset);
-    first_block->size = MEMORY_SIZE - start_offset - BLOCK_SIZE;
-    first_block->is_free = 1;
-    first_block->next_offset = OFFSET_NULL;
-    first_block->prev_offset = OFFSET_NULL;
-
-    shm_info->magic = SHM_MAGIC;
-    shm_info->initialized = 1;
-}
-
+/*
+    Aceasta functie cere memorie de la Kernel folosind mmap.
+    Seteaza mutex-ul sa functioneze intre procese (PTHREAD_PROCESS_SHARED).
+    Initializeaza primul bloc mare gol.
+*/
 int my_init()
 {
-    int fd = shm_open(SHM_NAME, O_RDWR | O_CREAT | O_EXCL, 0660);
-    int creator = 1;
-
-    if (fd < 0)
-    {
-        if (errno != EEXIST)
-        {
-            perror("Eroare la shm_open");
-            return -1;
-        }
-        creator = 0;
-        fd = shm_open(SHM_NAME, O_RDWR, 0660);
-        if (fd < 0)
-        {
-            perror("Eroare la shm_open (existenta)");
-            return -1;
-        }
-    }
-
-    if (creator)
-    {
-        if (ftruncate(fd, MEMORY_SIZE) != 0)
-        {
-            perror("Eroare la ftruncate");
-            close(fd);
-            return -1;
-        }
-    }
-
-    heap_start = mmap(NULL, MEMORY_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    close(fd);
+    // Cerem memorie de la OS care sa fie partajata (MAP_SHARED) si anonima (fara fisier)
+    heap_start = mmap(NULL, MEMORY_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 
     if (heap_start == MAP_FAILED)
     {
@@ -105,107 +31,141 @@ int my_init()
         return -1;
     }
 
+    // Primele date din heap sunt informatiile despre mutex si start
     shm_info = (SharedMemory *)heap_start;
 
-    if (creator || shm_info->magic != SHM_MAGIC)
-    {
-        init_shared_memory();
-    }
-    else
-    {
-        while (!shm_info->initialized)
-        {
-            usleep(1000);
-        }
-    }
+    // Initializam atributul mutex-ului pentru a fi partajat intre procese
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
+    pthread_mutex_init(&shm_info->mutex, &attr);
+
+    // Setam primul bloc imediat dupa structura SharedMemory
+    void *first_block_addr = (char *)heap_start + sizeof(SharedMemory);
+    shm_info->start_block = (Block *)first_block_addr;
+
+    // Configuram primul bloc: este tot spatiul ramas si este liber
+    shm_info->start_block->size = MEMORY_SIZE - sizeof(SharedMemory) - BLOCK_SIZE;
+    shm_info->start_block->is_free = 1;
+    shm_info->start_block->next = NULL;
+    shm_info->start_block->prev = NULL;
 
     return 0;
 }
 
+/*
+   Funcția de alocare.
+   1. Blochează mutex-ul.
+   2. Caută un bloc liber suficient de mare (First Fit).
+   3. Dacă blocul e prea mare, îl sparge în două (Split).
+   4. Returnează pointerul către date (după header).
+*/
 void *my_malloc(size_t size)
 {
-    if (size == 0 || shm_info == NULL)
+    if (size <= 0 || shm_info == NULL)
         return NULL;
 
     size_t aligned_size = ALIGN(size);
 
-    if (lock_mutex() != 0)
-        return NULL;
+    // Blocam accesul pentru alte procese
+    pthread_mutex_lock(&shm_info->mutex);
 
-    Block *curr = offset_to_block(shm_info->start_block_offset);
+    Block *curr = shm_info->start_block;
 
+    // Cautam primul bloc liber (First Fit)
     while (curr != NULL)
     {
         if (curr->is_free && curr->size >= aligned_size)
         {
+            // Am gasit un loc!
+
+            // Verificam daca putem sparge blocul in doua (Split)
+            // Daca ramane suficient loc pentru inca un header + minim 8 bytes
             if (curr->size >= aligned_size + BLOCK_SIZE + 8)
             {
                 Block *new_block = (Block *)((char *)curr + BLOCK_SIZE + aligned_size);
-                size_t new_offset = block_to_offset(new_block);
 
                 new_block->size = curr->size - aligned_size - BLOCK_SIZE;
                 new_block->is_free = 1;
-                new_block->next_offset = curr->next_offset;
-                new_block->prev_offset = block_to_offset(curr);
+                new_block->next = curr->next;
+                new_block->prev = curr;
 
-                if (curr->next_offset != OFFSET_NULL)
+                if (curr->next != NULL)
                 {
-                    Block *next_block = offset_to_block(curr->next_offset);
-                    next_block->prev_offset = new_offset;
+                    curr->next->prev = new_block;
                 }
-                curr->next_offset = new_offset;
+                curr->next = new_block;
                 curr->size = aligned_size;
             }
 
             curr->is_free = 0;
             pthread_mutex_unlock(&shm_info->mutex);
+
+            // Returnam adresa de dupa header
             return (void *)((char *)curr + BLOCK_SIZE);
         }
-        curr = offset_to_block(curr->next_offset);
+        curr = curr->next;
     }
 
+    // Nu am gasit loc
     pthread_mutex_unlock(&shm_info->mutex);
     return NULL;
 }
 
+// =============================================================
+// Eliberare si Realocare
+// =============================================================
+
+/*
+   Funcția de eliberare.
+   1. Calculează adresa header-ului.
+   2. Marchează blocul ca liber.
+   3. "Coalescing": Verifică dacă vecinii (stânga/dreapta) sunt liberi și îi unește.
+*/
 void my_free(void *ptr)
 {
-    if (!ptr || shm_info == NULL)
+    if (!ptr)
         return;
 
-    if (lock_mutex() != 0)
-        return;
+    pthread_mutex_lock(&shm_info->mutex);
 
+    // Obtinem pointerul catre structura Block (mergem in spate cu BLOCK_SIZE)
     Block *curr = (Block *)((char *)ptr - BLOCK_SIZE);
     curr->is_free = 1;
 
-    Block *next_block = offset_to_block(curr->next_offset);
-    if (next_block != NULL && next_block->is_free)
+    // Coalescing Dreapta (daca urmatorul e liber, il inghitim)
+    if (curr->next != NULL && curr->next->is_free)
     {
+        Block *next_block = curr->next;
         curr->size += BLOCK_SIZE + next_block->size;
-        curr->next_offset = next_block->next_offset;
-        if (curr->next_offset != OFFSET_NULL)
+        curr->next = next_block->next;
+        if (curr->next != NULL)
         {
-            Block *after_next = offset_to_block(curr->next_offset);
-            after_next->prev_offset = block_to_offset(curr);
+            curr->next->prev = curr;
         }
     }
 
-    Block *prev_block = offset_to_block(curr->prev_offset);
-    if (prev_block != NULL && prev_block->is_free)
+    // Coalescing Stanga (daca anteriorul e liber, ne inghite el pe noi)
+    if (curr->prev != NULL && curr->prev->is_free)
     {
+        Block *prev_block = curr->prev;
         prev_block->size += BLOCK_SIZE + curr->size;
-        prev_block->next_offset = curr->next_offset;
-        if (curr->next_offset != OFFSET_NULL)
+        prev_block->next = curr->next;
+        if (curr->next != NULL)
         {
-            Block *after_curr = offset_to_block(curr->next_offset);
-            after_curr->prev_offset = block_to_offset(prev_block);
+            curr->next->prev = prev_block;
         }
     }
 
     pthread_mutex_unlock(&shm_info->mutex);
 }
 
+/*
+   Funcția de realocare.
+   1. Alocă un bloc nou.
+   2. Copiază datele.
+   3. Eliberează blocul vechi.
+*/
 void *my_realloc(void *ptr, size_t size)
 {
     if (ptr == NULL)
@@ -217,15 +177,16 @@ void *my_realloc(void *ptr, size_t size)
     }
 
     Block *curr = (Block *)((char *)ptr - BLOCK_SIZE);
-    size_t aligned_size = ALIGN(size);
-    if (curr->size >= aligned_size)
+    if (curr->size >= size)
     {
+        // Avem deja loc suficient, nu facem nimic (simplificare)
         return ptr;
     }
 
     void *new_ptr = my_malloc(size);
     if (new_ptr)
     {
+        // Copiem datele vechi (minimul dintre dimensiuni)
         memcpy(new_ptr, ptr, curr->size);
         my_free(ptr);
     }
@@ -236,17 +197,15 @@ void debug_print_heap()
 {
     if (!shm_info)
         return;
-    if (lock_mutex() != 0)
-        return;
-
-    Block *curr = offset_to_block(shm_info->start_block_offset);
+    pthread_mutex_lock(&shm_info->mutex);
+    Block *curr = shm_info->start_block;
     printf("\n[DEBUG] Stare Heap:\n");
     int i = 0;
     while (curr != NULL)
     {
         printf("  Bloc %d: %zu bytes [%s] la adresa %p\n",
                i++, curr->size, curr->is_free ? "LIBER" : "OCUPAT", (void *)curr);
-        curr = offset_to_block(curr->next_offset);
+        curr = curr->next;
     }
     printf("\n");
     pthread_mutex_unlock(&shm_info->mutex);
