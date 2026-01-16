@@ -16,7 +16,7 @@ static void *heap_start = NULL;
 static SharedMemory *shm_info = NULL;
 
 // ============================================================================
-// Student 1 (Christian): Helper conversions for offset-based pointers
+// Helper conversions for offset-based pointers
 // ============================================================================
 // Converteste un offset din heap in pointer la Block (NULL pentru OFFSET_NULL)
 static Block *offset_to_block(size_t offset)
@@ -35,7 +35,7 @@ static size_t block_to_offset(Block *block)
 }
 
 // ============================================================================
-// Student 1 (Christian): Sincronizare intre procese (mutex robust)
+// Sincronizare intre procese (mutex robust)
 // ============================================================================
 // Blocheaza mutex-ul din memoria partajata si il repara daca detinatorul a murit
 static int lock_mutex()
@@ -79,7 +79,7 @@ static void init_shared_memory()
 }
 
 // ============================================================================
-// Student 1 (Christian): Initializare memorie partajata
+// Initializare memorie partajata
 // ============================================================================
 // Creeaza/atasheaza shared memory si pregateste structurile interne
 int my_init()
@@ -113,6 +113,7 @@ int my_init()
         }
     }
 
+    // Mapam memoria partajata in spatiul procesului
     heap_start = mmap(NULL, MEMORY_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     close(fd);
 
@@ -124,6 +125,7 @@ int my_init()
 
     shm_info = (SharedMemory *)heap_start;
 
+    // Daca e prima data sau structura e invalida, (re)initializam
     if (creator || shm_info->magic != SHM_MAGIC)
     {
         init_shared_memory();
@@ -140,7 +142,7 @@ int my_init()
 }
 
 // ============================================================================
-// Student 1 (Christian): Alocare (First Fit + Split)
+// Alocare (First Fit + Split)
 // ============================================================================
 // Aloca un bloc de memorie folosind first-fit si split daca e nevoie
 void *my_malloc(size_t size)
@@ -155,10 +157,12 @@ void *my_malloc(size_t size)
 
     Block *curr = offset_to_block(shm_info->start_block_offset);
 
+    // Cautare first-fit in lista de blocuri
     while (curr != NULL)
     {
         if (curr->is_free && curr->size >= aligned_size)
         {
+            // Split: pastram restul ca bloc liber daca incape
             if (curr->size >= aligned_size + BLOCK_SIZE + 8)
             {
                 Block *new_block = (Block *)((char *)curr + BLOCK_SIZE + aligned_size);
@@ -190,7 +194,7 @@ void *my_malloc(size_t size)
 }
 
 // ============================================================================
-// Student 2 (Eduard): Eliberare + Coalescing
+//  Eliberare + Coalescing
 // ============================================================================
 // Marcheaza blocul ca liber si uneste blocuri libere adiacente
 void my_free(void *ptr)
@@ -202,8 +206,9 @@ void my_free(void *ptr)
         return;
 
     Block *curr = (Block *)((char *)ptr - BLOCK_SIZE);
-    curr->is_free = 1;
+    curr->is_free = 1; // marcam blocul curent liber
 
+    // Coalescing cu urmatorul bloc
     Block *next_block = offset_to_block(curr->next_offset);
     if (next_block != NULL && next_block->is_free)
     {
@@ -216,6 +221,7 @@ void my_free(void *ptr)
         }
     }
 
+    // Coalescing cu blocul anterior
     Block *prev_block = offset_to_block(curr->prev_offset);
     if (prev_block != NULL && prev_block->is_free)
     {
@@ -232,7 +238,7 @@ void my_free(void *ptr)
 }
 
 // ============================================================================
-// Student 2 (Eduard): Realocare (aloca, copiaza, elibereaza)
+// Realocare (aloca, copiaza, elibereaza)
 // ============================================================================
 // Redimensioneaza un bloc; muta datele daca e necesar
 void *my_realloc(void *ptr, size_t size)
@@ -247,11 +253,13 @@ void *my_realloc(void *ptr, size_t size)
 
     Block *curr = (Block *)((char *)ptr - BLOCK_SIZE);
     size_t aligned_size = ALIGN(size);
+    // Daca blocul curent e suficient, il pastram
     if (curr->size >= aligned_size)
     {
         return ptr;
     }
 
+    // Alocam un bloc nou si copiem datele vechi
     void *new_ptr = my_malloc(size);
     if (new_ptr)
     {
