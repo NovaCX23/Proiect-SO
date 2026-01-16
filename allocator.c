@@ -12,7 +12,7 @@ static void *heap_start = NULL;
 static SharedMemory *shm_info = NULL;
 
 // =============================================================
-//  Initializare și Alocare
+//  Initializare si Alocare
 // =============================================================
 
 /*
@@ -22,7 +22,7 @@ static SharedMemory *shm_info = NULL;
 */
 int my_init()
 {
-    // Cerem memorie de la OS care sa fie partajata (MAP_SHARED) si anonima (fara fisier)
+    // Cerem memorie de la OS care sa fie partajata (MAP_SHARED) si anonima
     heap_start = mmap(NULL, MEMORY_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 
     if (heap_start == MAP_FAILED)
@@ -54,11 +54,11 @@ int my_init()
 }
 
 /*
-   Funcția de alocare.
-   1. Blochează mutex-ul.
-   2. Caută un bloc liber suficient de mare (First Fit).
-   3. Dacă blocul e prea mare, îl sparge în două (Split).
-   4. Returnează pointerul către date (după header).
+   Functia de alocare.
+   1. Blocheaza mutex-ul.
+   2. Cauta un bloc liber suficient de mare (First Fit).
+   3. Daca blocul e prea mare, il sparge în doua (Split).
+   4. Returneaza pointerul catre date (dupa header).
 */
 void *my_malloc(size_t size)
 {
@@ -77,7 +77,7 @@ void *my_malloc(size_t size)
     {
         if (curr->is_free && curr->size >= aligned_size)
         {
-            // Am gasit un loc!
+            // Am gasit un loc
 
             // Verificam daca putem sparge blocul in doua (Split)
             // Daca ramane suficient loc pentru inca un header + minim 8 bytes
