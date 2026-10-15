@@ -41,6 +41,6 @@ Verification legend:
 
 ## Housekeeping
 
-- [ ] **H1. Compiled `tests` binary is committed, no `.gitignore`** - repo root.
+- [x] **H1. Compiled `tests` binary is committed, no `.gitignore`** - repo root.
   Why: build output in git gets stale (the committed one predates several commits).
   Verify: `git ls-files` no longer lists `tests`; a fresh build leaves `git status` clean.
