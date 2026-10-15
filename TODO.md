@@ -34,7 +34,7 @@ Verification legend:
   Why: `my_malloc(384)` succeeds from the free tail of the heap even if coalescing is broken.
   Fix: check that the 384-byte block is placed at `a` (only possible if a, b, c merged).
   Verify: [shim] passes on current code, fails when coalescing is disabled on purpose.
-- [ ] **T2. Duplicated output after `fork`** - `tests.c`, fork/exec tests.
+- [x] **T2. Duplicated output after `fork`** - `tests.c`, fork/exec tests.
   Why: the child inherits the parent's unflushed `stdout` buffer and `exit()` prints it again
   when output goes to a file or pipe.
   Verify: [linux] `./tests > out.txt` contains each `[OK]` line once.

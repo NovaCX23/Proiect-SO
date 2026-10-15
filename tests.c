@@ -137,6 +137,7 @@ static void test_invalid_free()
 static void test_multi_process_fork()
 {
     printf("\n--- Test: multi-process fork ---\n");
+    fflush(stdout); // altfel copilul mosteneste bufferul si il afiseaza a doua oara
     pid_t pid = fork();
     if (pid == 0)
     {
@@ -171,6 +172,7 @@ static void test_multi_process_fork()
 static void test_multi_process_exec(char *self_path)
 {
     printf("\n--- Test: multi-process exec ---\n");
+    fflush(stdout); // altfel copilul mosteneste bufferul si il afiseaza a doua oara
     pid_t pid = fork();
     if (pid == 0)
     {
