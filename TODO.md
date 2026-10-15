@@ -13,7 +13,7 @@ Verification legend:
   blocks everyone forever.
   Verify: [shim] harness reports `setrobust` called 1 time instead of 0;
   [linux] `nm -D tests | grep setrobust` shows the symbol.
-- [ ] **B2. `my_init` race between creator and other processes** - `allocator.c`, `my_init`.
+- [x] **B2. `my_init` race between creator and other processes** - `allocator.c`, `my_init`.
   Why: a second process can `mmap` before the creator's `ftruncate` (SIGBUS on first access),
   or see `magic` not yet set and run `init_shared_memory` concurrently with the creator.
   Verify: [linux] new test `test_concurrent_init` (many children call `my_init` at the same

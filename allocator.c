@@ -74,7 +74,38 @@ static void init_shared_memory()
     first_block->prev_offset = OFFSET_NULL;
 
     shm_info->magic = SHM_MAGIC;
-    shm_info->initialized = 1;
+    // Release: cine vede initialized == 1 vede si mutex-ul si primul bloc
+    __atomic_store_n(&shm_info->initialized, 1, __ATOMIC_RELEASE);
+}
+
+// Cat asteapta un proces care nu e creator (in pasi de 1 ms)
+#define INIT_TIMEOUT_MS 5000
+
+// Asteapta ca creatorul sa faca ftruncate (altfel accesul la memorie da SIGBUS)
+static int wait_for_size(int fd)
+{
+    struct stat st;
+    for (int i = 0; i < INIT_TIMEOUT_MS; i++)
+    {
+        if (fstat(fd, &st) != 0)
+            return -1;
+        if (st.st_size >= MEMORY_SIZE)
+            return 0;
+        usleep(1000);
+    }
+    return -1;
+}
+
+// Asteapta ca creatorul sa termine init_shared_memory
+static int wait_for_init()
+{
+    for (int i = 0; i < INIT_TIMEOUT_MS; i++)
+    {
+        if (__atomic_load_n(&shm_info->initialized, __ATOMIC_ACQUIRE) && shm_info->magic == SHM_MAGIC)
+            return 0;
+        usleep(1000);
+    }
+    return -1;
 }
 
 // ============================================================================
@@ -111,6 +142,12 @@ int my_init()
             return -1;
         }
     }
+    else if (wait_for_size(fd) != 0)
+    {
+        fprintf(stderr, "Memoria partajata nu are dimensiunea corecta (sterge /dev/shm%s)\n", SHM_NAME);
+        close(fd);
+        return -1;
+    }
 
     // Mapam memoria partajata in spatiul procesului
     heap_start = mmap(NULL, MEMORY_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
@@ -124,17 +161,19 @@ int my_init()
 
     shm_info = (SharedMemory *)heap_start;
 
-    // Daca e prima data sau structura e invalida, (re)initializam
-    if (creator || shm_info->magic != SHM_MAGIC)
+    // Doar creatorul initializeaza; ceilalti asteapta, altfel ar sterge
+    // mutex-ul si lista de blocuri in timp ce creatorul le foloseste
+    if (creator)
     {
         init_shared_memory();
     }
-    else
+    else if (wait_for_init() != 0)
     {
-        while (!shm_info->initialized)
-        {
-            usleep(1000);
-        }
+        fprintf(stderr, "Memoria partajata nu a fost initializata (sterge /dev/shm%s)\n", SHM_NAME);
+        munmap(heap_start, MEMORY_SIZE);
+        heap_start = NULL;
+        shm_info = NULL;
+        return -1;
     }
 
     return 0;

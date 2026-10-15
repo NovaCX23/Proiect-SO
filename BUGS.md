@@ -2,21 +2,6 @@
 
 ## Found
 
-### B2. `my_init` race between the creator and other processes
-`allocator.c`, `my_init`:
-1. The creator does `shm_open(O_CREAT | O_EXCL)` and only then `ftruncate`. Another process
-   that opens the object in between maps a 0-byte object; reading `shm_info->magic` -> SIGBUS.
-   If the creator dies in that window, every later `my_init` gets SIGBUS until the object is
-   removed by hand.
-2. A non-creator that reads `magic != SHM_MAGIC` (creator still initializing) calls
-   `init_shared_memory` itself, which `memset`s the mutex and the block list while the creator
-   (or the creator's first `my_malloc`) is using them.
-
-Reproduction: start several processes that call `my_init` at the same moment on a fresh object
-(`rm /dev/shm/proiect_so_allocator` first). The existing tests never hit this because the
-parent always calls `my_init` before `fork`/`exec`. Confirmed by code reading; not reproduced
-at runtime yet (needs Linux).
-
 ### B3. `ALIGN` overflow for huge sizes
 `allocator.c`, `my_malloc` / `my_realloc`: `ALIGN(SIZE_MAX - 3)` wraps around to 0.
 
@@ -51,6 +36,28 @@ is killed while inside `my_malloc`/`my_free`, every other process blocks forever
 Fix: call `pthread_mutexattr_setrobust` unconditionally (POSIX.1-2008, glibc >= 2.12).
 No automated test: the public API cannot hold the lock and die on purpose.
 Verified on the Windows shim (call count 0 -> 1); on Linux check with `nm -D tests`.
+
+### B2. `my_init` race between the creator and other processes - commit "fix: make non-creator processes wait for my_init instead of re-initializing"
+`allocator.c`, `my_init`:
+1. The creator does `shm_open(O_CREAT | O_EXCL)` and only then `ftruncate`. Another process
+   that opens the object in between maps a 0-byte object; reading `shm_info->magic` -> SIGBUS.
+   If the creator dies in that window, every later `my_init` gets SIGBUS until the object is
+   removed by hand.
+2. A non-creator that reads `magic != SHM_MAGIC` (creator still initializing) calls
+   `init_shared_memory` itself, which `memset`s the mutex and the block list while the creator
+   (or the creator's first `my_malloc`) is using them.
+
+Reproduction: start several processes that call `my_init` at the same moment on a fresh object
+(`rm /dev/shm/proiect_so_allocator` first). The existing tests never hit this because the
+parent always calls `my_init` before `fork`/`exec`. Test: `test_concurrent_init`.
+
+Fix: only the creator initializes. A non-creator waits (max ~5 s) until `fstat` shows the full
+size, then until `initialized == 1` (release store / acquire load); on timeout `my_init` prints
+an error and returns -1. Behaviour change: an object left half-initialized by a crashed creator
+is no longer silently re-initialized; it must be removed with
+`rm /dev/shm/proiect_so_allocator` (the error message says so).
+Verified on the Windows shim: build clean, single-process tests pass, a 0-byte leftover object
+gives an error instead of SIGBUS. **Not yet verified on Linux** (`test_concurrent_init`).
 
 ## Suggestions
 
