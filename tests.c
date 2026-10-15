@@ -74,6 +74,26 @@ static void test_coalescing()
         my_free(big);
 }
 
+static void test_huge_size()
+{
+    printf("\n--- Test: huge size ---\n");
+    // SIZE_MAX - 3: ALIGN ar da overflow la 0
+    void *p = my_malloc((size_t)-4);
+    assert_true(p == NULL, "my_malloc(SIZE_MAX - 3) returns NULL");
+    if (p)
+        my_free(p);
+
+    char *q = (char *)my_malloc(16);
+    assert_true(q != NULL, "alloc before huge realloc");
+    if (!q)
+        return;
+    strcpy(q, "data");
+    char *r = (char *)my_realloc(q, (size_t)-4);
+    assert_true(r == NULL, "my_realloc(p, SIZE_MAX - 3) returns NULL");
+    assert_true(strcmp(q, "data") == 0, "old block is kept after failed realloc");
+    my_free(r ? r : q);
+}
+
 static void test_multi_process_fork()
 {
     printf("\n--- Test: multi-process fork ---\n");
@@ -214,6 +234,7 @@ int main(int argc, char **argv)
     test_basic_alloc_free();
     test_realloc_grow();
     test_coalescing();
+    test_huge_size();
     test_multi_process_fork();
     test_multi_process_exec(argv[0]);
     test_concurrent_init();
