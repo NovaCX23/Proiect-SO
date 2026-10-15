@@ -2,16 +2,6 @@
 
 ## Found
 
-### B1. Mutex is not robust on Linux
-`allocator.c`, `init_shared_memory`: `pthread_mutexattr_setrobust` is guarded by
-`#ifdef PTHREAD_MUTEX_ROBUST`. In glibc `PTHREAD_MUTEX_ROBUST` is an enum constant, not a
-macro, so the call is compiled out and the mutex is a normal (non-robust) one.
-
-Reproduction: the committed Linux binary `tests` (built from `786d3f4`, same `#ifdef`) imports
-`pthread_mutex_consistent` but not `pthread_mutexattr_setrobust` (`nm -D tests`). If a process
-is killed while inside `my_malloc`/`my_free`, every other process blocks forever in
-`pthread_mutex_lock`, and the `EOWNERDEAD` branch in `lock_mutex` is dead code.
-
 ### B2. `my_init` race between the creator and other processes
 `allocator.c`, `my_init`:
 1. The creator does `shm_open(O_CREAT | O_EXCL)` and only then `ftruncate`. Another process
@@ -48,7 +38,19 @@ Reproduction (foreign pointer): `char buf[256] = {0}; my_free(buf + 128);` write
 
 ## Fixed
 
-(none yet)
+### B1. Mutex is not robust on Linux - commit "fix: always make the shared mutex robust"
+`allocator.c`, `init_shared_memory`: `pthread_mutexattr_setrobust` is guarded by
+`#ifdef PTHREAD_MUTEX_ROBUST`. In glibc `PTHREAD_MUTEX_ROBUST` is an enum constant, not a
+macro, so the call is compiled out and the mutex is a normal (non-robust) one.
+
+Reproduction: the committed Linux binary `tests` (built from `786d3f4`, same `#ifdef`) imports
+`pthread_mutex_consistent` but not `pthread_mutexattr_setrobust` (`nm -D tests`). If a process
+is killed while inside `my_malloc`/`my_free`, every other process blocks forever in
+`pthread_mutex_lock`, and the `EOWNERDEAD` branch in `lock_mutex` is dead code.
+
+Fix: call `pthread_mutexattr_setrobust` unconditionally (POSIX.1-2008, glibc >= 2.12).
+No automated test: the public API cannot hold the lock and die on purpose.
+Verified on the Windows shim (call count 0 -> 1); on Linux check with `nm -D tests`.
 
 ## Suggestions
 

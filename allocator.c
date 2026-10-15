@@ -59,9 +59,8 @@ static void init_shared_memory()
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
-#ifdef PTHREAD_MUTEX_ROBUST
+    // Fara #ifdef: in glibc PTHREAD_MUTEX_ROBUST e enum, nu macro
     pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);
-#endif
     pthread_mutex_init(&shm_info->mutex, &attr);
     pthread_mutexattr_destroy(&attr);
 

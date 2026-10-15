@@ -7,7 +7,7 @@ Verification legend:
 
 ## Bugs
 
-- [ ] **B1. Mutex is not robust on Linux** - `allocator.c`, `init_shared_memory`.
+- [x] **B1. Mutex is not robust on Linux** - `allocator.c`, `init_shared_memory`.
   Why: `#ifdef PTHREAD_MUTEX_ROBUST` is false on glibc (it is an enum, not a macro), so
   `pthread_mutexattr_setrobust` is never called and a process that dies holding the lock
   blocks everyone forever.
