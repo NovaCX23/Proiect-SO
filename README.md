@@ -55,7 +55,7 @@ Run the tests:
 1.  **Simple Allocation Test**: Checks that we can allocate an array of ints and write into it.
 2.  **Concurrency Test**: Creates a child process with `fork()`. Both the parent and the child allocate memory at the same time and write data, showing that the mutex correctly protects the structures.
 3.  **Concurrency Test (exec)**: The parent starts a child through `exec`, and both processes allocate memory at the same time using the same POSIX shared memory object.
-4.  **Coalescing Test**: Allocates 3 blocks and frees them in random order to check that they merge correctly into a single large free block.
+4.  **Coalescing Test**: Allocates 3 consecutive blocks, frees them out of order (b, a, c) and checks that a block as large as all three is placed at the address of the first one, which is only possible if they merged.
 5.  **Realloc Test**: Grows a block and checks that the data is preserved.
 
 ---

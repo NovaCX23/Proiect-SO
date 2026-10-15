@@ -64,12 +64,20 @@ static void test_coalescing()
 
     assert_true(a && b && c, "allocated three blocks");
 
+    // a, b, c consecutive: 384 octeti incap la adresa lui a doar daca s-au unit
+    int contiguous = (char *)b == (char *)a + 128 + BLOCK_SIZE &&
+                     (char *)c == (char *)b + 128 + BLOCK_SIZE;
+
     my_free(b);
     my_free(a);
     my_free(c);
 
     void *big = my_malloc(384);
     assert_true(big != NULL, "coalescing creates a large block");
+    if (contiguous)
+        assert_true(big == a, "merged block is reused at the address of a");
+    else
+        printf("[SKIP] blocks not contiguous, cannot check the merge address\n");
     if (big)
         my_free(big);
 }

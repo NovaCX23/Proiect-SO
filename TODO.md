@@ -30,7 +30,7 @@ Verification legend:
 
 ## Tests
 
-- [ ] **T1. `test_coalescing` does not prove coalescing** - `tests.c`.
+- [x] **T1. `test_coalescing` does not prove coalescing** - `tests.c`.
   Why: `my_malloc(384)` succeeds from the free tail of the heap even if coalescing is broken.
   Fix: check that the 384-byte block is placed at `a` (only possible if a, b, c merged).
   Verify: [shim] passes on current code, fails when coalescing is disabled on purpose.
