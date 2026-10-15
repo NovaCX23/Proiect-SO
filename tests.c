@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -135,6 +136,61 @@ static void test_multi_process_exec(char *self_path)
     }
 }
 
+// Mai multe procese apeleaza my_init in acelasi moment pe un obiect nou.
+// Sterge obiectul de memorie partajata, deci trebuie rulat ultimul.
+static void test_concurrent_init()
+{
+    printf("\n--- Test: concurrent my_init ---\n");
+    int ok = 1;
+    for (int round = 0; round < 20 && ok; round++)
+    {
+        shm_unlink(SHM_NAME);
+        int barrier[2];
+        if (pipe(barrier) != 0)
+        {
+            assert_true(0, "pipe failed");
+            return;
+        }
+        pid_t pids[8];
+        int n = 0;
+        fflush(stdout);
+        for (int i = 0; i < 8; i++)
+        {
+            pid_t pid = fork();
+            if (pid == 0)
+            {
+                char c;
+                alarm(10); // un deadlock devine eroare, nu blocheaza testele
+                close(barrier[1]);
+                if (read(barrier[0], &c, 1) < 0) // asteptam pana parintele inchide pipe-ul
+                    _exit(1);
+                if (my_init() != 0)
+                    _exit(1);
+                char *p = (char *)my_malloc(64);
+                if (!p)
+                    _exit(1);
+                strcpy(p, "init");
+                my_free(p);
+                _exit(0);
+            }
+            if (pid > 0)
+                pids[n++] = pid;
+        }
+        close(barrier[0]);
+        close(barrier[1]); // toti copiii pornesc deodata
+        for (int i = 0; i < n; i++)
+        {
+            int status = 0;
+            waitpid(pids[i], &status, 0);
+            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+                ok = 0;
+        }
+        if (n != 8)
+            ok = 0;
+    }
+    assert_true(ok, "processes calling my_init at the same time all succeed");
+}
+
 int main(int argc, char **argv)
 {
     if (my_init() != 0)
@@ -160,6 +216,7 @@ int main(int argc, char **argv)
     test_coalescing();
     test_multi_process_fork();
     test_multi_process_exec(argv[0]);
+    test_concurrent_init();
 
     if (failures == 0)
     {
