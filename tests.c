@@ -94,6 +94,38 @@ static void test_huge_size()
     my_free(r ? r : q);
 }
 
+static void test_invalid_free()
+{
+    printf("\n--- Test: double free / invalid pointer ---\n");
+    char *a = (char *)my_malloc(64);
+    char *b = (char *)my_malloc(64);
+    char *c = (char *)my_malloc(64);
+    char *d = (char *)my_malloc(64);
+    assert_true(a && b && c && d, "allocated four blocks");
+    if (!(a && b && c && d))
+        return;
+
+    my_free(a);
+    my_free(b); // b se uneste cu a
+    my_free(b); // double free: nu trebuie sa mareasca a peste c
+
+    char *p = (char *)my_malloc(200);
+    int overlap = p && p < c + 64 && c - BLOCK_SIZE < p + 200;
+    assert_true(p != NULL && !overlap, "double free does not create overlapping blocks");
+    if (p)
+        my_free(p);
+    my_free(c);
+    my_free(d);
+
+    char outside[256] = {0};
+    my_free(outside + 128);
+    int untouched = 1;
+    for (int i = 0; i < 256; i++)
+        if (outside[i] != 0)
+            untouched = 0;
+    assert_true(untouched, "my_free ignores pointers outside the heap");
+}
+
 static void test_multi_process_fork()
 {
     printf("\n--- Test: multi-process fork ---\n");
@@ -235,6 +267,7 @@ int main(int argc, char **argv)
     test_realloc_grow();
     test_coalescing();
     test_huge_size();
+    test_invalid_free();
     test_multi_process_fork();
     test_multi_process_exec(argv[0]);
     test_concurrent_init();
