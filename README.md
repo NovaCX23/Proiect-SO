@@ -1,50 +1,48 @@
-# Proiect Sisteme de Operare - Allocator de Memorie
+# Operating Systems Project - Memory Allocator
 
-Acest proiect implementează o bibliotecă de gestionare a memoriei (alocator) care poate fi utilizată concurent de mai multe procese. Biblioteca oferă funcționalități similare cu `malloc`, `free` și `realloc`, dar lucrează pe o zonă de memorie partajată (Shared Memory).
+This project implements a memory management library (allocator) that can be used concurrently by multiple processes. The library provides functionality similar to `malloc`, `free` and `realloc`, but it works on a shared memory region.
 
-## 👥 Echipa și Împărțirea Sarcinilor
+## 👥 Team and Task Split
 
-Proiectul a fost realizat de o echipă de 2 studenți, cu responsabilități împărțite astfel:
+The project was built by a team of 2 students, with responsibilities split as follows:
 
-### Student 1 (Christian): Infrastructură și Alocare
+### Student 1 (Christian): Infrastructure and Allocation
 
-- **Inițializare (`my_init`)**: Configurarea memoriei partajate folosind `shm_open` + `mmap` și inițializarea mecanismelor de sincronizare (Mutex).
-- **Alocare (`my_malloc`)**: Implementarea algoritmului **First Fit** pentru găsirea blocurilor libere și logica de **Split** (împărțirea unui bloc mare în două mai mici).
+- **Initialization (`my_init`)**: Setting up the shared memory with `shm_open` + `mmap` and initializing the synchronization mechanisms (mutex).
+- **Allocation (`my_malloc`)**: Implementing the **First Fit** algorithm for finding free blocks and the **Split** logic (dividing a large block into two smaller ones).
 
-### Student 2 (Eduard): Gestionare și Optimizare
+### Student 2 (Eduard): Management and Optimization
 
-- **Eliberare (`my_free`)**: Implementarea logicii de marcare a blocurilor ca libere și algoritmul de **Coalescing** (unirea blocurilor libere adiacente pentru a reduce fragmentarea).
-- **Realocare (`my_realloc`)**: Redimensionarea blocurilor de memorie (alocare nouă + copiere date + eliberare veche).
-
----
-
-## 📂 Structura Proiectului
-
-- `allocator.h` - Fișierul header. Conține definițiile structurilor de date (`Block`, `SharedMemory`) și semnăturile funcțiilor.
-- `allocator.c` - Implementarea efectivă a bibliotecii. Aici se află logica de gestionare a listei dublu înlănțuite de blocuri de memorie.
-- `tests.c` - Teste automate pentru funcționalitatea bibliotecii (alocare, realloc, coalescing, multi-proces).
+- **Freeing (`my_free`)**: Implementing the logic that marks blocks as free and the **Coalescing** algorithm (merging adjacent free blocks to reduce fragmentation).
+- **Reallocation (`my_realloc`)**: Resizing memory blocks (new allocation + copying the data + freeing the old block).
 
 ---
 
-## ⚙️ Detalii Tehnice
+## 📂 Project Structure
 
-1.  **Memorie Partajată**: Folosim `shm_open` + `mmap` pentru a crea un obiect POSIX shared memory cu un nume fix (`/proiect_so_allocator`) care poate fi accesat din procese diferite (inclusiv după `exec`).
-2.  **Sincronizare**: Pentru a evita _race condition_-urile când mai multe procese cer memorie simultan, folosim un `pthread_mutex_t` cu `PTHREAD_PROCESS_SHARED` și `PTHREAD_MUTEX_ROBUST`. Mutex-ul este stocat chiar la începutul zonei de memorie mapate.
-3.  **Structura Datelor**: Memoria este gestionată ca o listă dublu înlănțuită de blocuri. Fiecare bloc are un header (`struct Block`) care conține dimensiunea și starea (liber/ocupat).
+- `allocator.h` - The header file. Contains the data structure definitions (`Block`, `SharedMemory`) and the function signatures.
+- `allocator.c` - The actual library implementation. This is where the logic for managing the doubly linked list of memory blocks lives.
+- `tests.c` - Automated tests for the library's functionality (allocation, realloc, coalescing, multi-process).
 
 ---
 
-## 🚀 Cum se compilează și rulează
+## ⚙️ Technical Details
 
-Deoarece folosim thread-uri (pentru mutex) și avem mai multe fișiere sursă, compilarea se face astfel:
+1.  **Shared Memory**: We use `shm_open` + `mmap` to create a POSIX shared memory object with a fixed name (`/proiect_so_allocator`) that can be accessed from different processes (including after `exec`).
+2.  **Synchronization**: To avoid _race conditions_ when several processes request memory at the same time, we use a `pthread_mutex_t` with `PTHREAD_PROCESS_SHARED` and `PTHREAD_MUTEX_ROBUST`. The mutex is stored at the very beginning of the mapped memory region.
+3.  **Data Structure**: Memory is managed as a doubly linked list of blocks. Each block has a header (`struct Block`) that holds its size and its state (free/used).
+
+---
+
+## 🚀 How to Build and Run
+
+Because we use threads (for the mutex) and have several source files, the build command is:
 
 ```bash
 gcc -o tests tests.c allocator.c -pthread
 ```
 
-Rulare:
-
-Rulare teste:
+Run the tests:
 
 ```bash
 ./tests
@@ -52,19 +50,19 @@ Rulare teste:
 
 ---
 
-## 🧪 Scenarii de Testare (în tests.c)
+## 🧪 Test Scenarios (in tests.c)
 
-1.  **Test Alocare Simplă**: Verifică dacă putem aloca și scrie într-un vector de int-uri.
-2.  **Test Concurență**: Creează un proces copil cu `fork()`. Atât părintele cât și copilul alocă memorie simultan și scriu date, demonstrând că mutex-ul protejează corect structurile.
-3.  **Test Concurență (exec)**: Părintele pornește un copil prin `exec`, iar ambele procese alocă memorie simultan folosind același obiect POSIX shared memory.
-4.  **Test Coalescing**: Alocă 3 blocuri și le eliberează în ordine aleatorie pentru a verifica dacă se unesc corect într-un singur bloc mare liber.
-5.  **Test Realloc**: Crește dimensiunea unui bloc și verifică păstrarea datelor.
+1.  **Simple Allocation Test**: Checks that we can allocate an array of ints and write into it.
+2.  **Concurrency Test**: Creates a child process with `fork()`. Both the parent and the child allocate memory at the same time and write data, showing that the mutex correctly protects the structures.
+3.  **Concurrency Test (exec)**: The parent starts a child through `exec`, and both processes allocate memory at the same time using the same POSIX shared memory object.
+4.  **Coalescing Test**: Allocates 3 blocks and frees them in random order to check that they merge correctly into a single large free block.
+5.  **Realloc Test**: Grows a block and checks that the data is preserved.
 
 ---
 
-## 🧹 Curățare (opțional)
+## 🧹 Cleanup (optional)
 
-Dacă vrei să ștergi manual obiectul de memorie partajată după teste:
+If you want to manually delete the shared memory object after the tests:
 
 ```bash
 rm -f /dev/shm/proiect_so_allocator
