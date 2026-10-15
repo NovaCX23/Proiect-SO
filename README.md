@@ -57,6 +57,9 @@ Run the tests:
 3.  **Concurrency Test (exec)**: The parent starts a child through `exec`, and both processes allocate memory at the same time using the same POSIX shared memory object.
 4.  **Coalescing Test**: Allocates 3 consecutive blocks, frees them out of order (b, a, c) and checks that a block as large as all three is placed at the address of the first one, which is only possible if they merged.
 5.  **Realloc Test**: Grows a block and checks that the data is preserved.
+6.  **Huge Size Test**: `my_malloc` and `my_realloc` with a size close to `SIZE_MAX` must return `NULL` (and `my_realloc` must keep the old block).
+7.  **Double Free / Invalid Pointer Test**: Freeing a block twice, or freeing a pointer that does not come from `my_malloc`, is ignored and does not corrupt the heap.
+8.  **Concurrent Init Test**: Deletes the shared memory object, then 8 processes call `my_init` at the same moment (20 rounds); all of them must succeed. It runs last because it replaces the shared memory object.
 
 ---
 
