@@ -245,6 +245,19 @@ void my_free(void *ptr)
         return;
 
     Block *curr = (Block *)((char *)ptr - BLOCK_SIZE);
+
+    // Acceptam doar blocuri din lista care sunt ocupate (prinde double free
+    // si pointeri care nu vin de la my_malloc)
+    Block *it = offset_to_block(shm_info->start_block_offset);
+    while (it != NULL && it != curr)
+        it = offset_to_block(it->next_offset);
+    if (it == NULL || curr->is_free)
+    {
+        pthread_mutex_unlock(&shm_info->mutex);
+        fprintf(stderr, "my_free: pointer invalid sau eliberat deja (%p)\n", ptr);
+        return;
+    }
+
     curr->is_free = 1; // marcam blocul curent liber
 
     // Coalescing cu urmatorul bloc

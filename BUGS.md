@@ -2,18 +2,7 @@
 
 ## Found
 
-### B4. `my_free` accepts double frees and pointers it never returned
-`allocator.c`, `my_free`.
-
-Reproduction (double free):
-```c
-a = my_malloc(64); b = my_malloc(64); c = my_malloc(64); d = my_malloc(64);
-my_free(a); my_free(b);   /* b is merged into a (160 bytes) */
-my_free(b);               /* stale header of b: merges into a AGAIN -> a grows to 256 */
-p = my_malloc(200);       /* returns a, which now overlaps c */
-```
-Reproduction (foreign pointer): `char buf[256] = {0}; my_free(buf + 128);` writes
-`is_free = 1` into `buf`.
+(none open)
 
 ## Fixed
 
@@ -63,6 +52,38 @@ Test: `test_huge_size`.
 Fix: return NULL when `size > MEMORY_SIZE` before calling `ALIGN`; `my_realloc` keeps the old
 block, like the standard `realloc`. Verified on the Windows shim: test fails before, passes after.
 
+### B4. `my_free` accepts double frees and pointers it never returned - commit "fix: reject double free and foreign pointers in my_free"
+`allocator.c`, `my_free`.
+
+Reproduction (double free):
+```c
+a = my_malloc(64); b = my_malloc(64); c = my_malloc(64); d = my_malloc(64);
+my_free(a); my_free(b);   /* b is merged into a (160 bytes) */
+my_free(b);               /* stale header of b: merges into a AGAIN -> a grows to 256 */
+p = my_malloc(200);       /* returns a, which now overlaps c */
+```
+Reproduction (foreign pointer): `char buf[256] = {0}; my_free(buf + 128);` writes
+`is_free = 1` into `buf`. Test: `test_invalid_free`.
+
+Fix: under the mutex, walk the block list and only free `ptr` if its header is a block in the
+list that is not already free; otherwise print an error to stderr and return. Verified on the
+Windows shim: test fails before, passes after.
+
 ## Suggestions
 
-(none yet)
+- `my_free` is now O(number of blocks), the same as `my_malloc` (first fit already walks the
+  list). Fine for a 1 MB heap.
+- `my_realloc` does not validate `ptr` (it reads `curr->size` before calling `my_free`); a bad
+  pointer there is still undefined behaviour, like the standard `realloc`.
+- User pointers are 8-byte aligned; the standard `malloc` guarantees 16 bytes on x86-64
+  (`alignof(max_align_t)`). Matters only for `long double` / SSE types.
+- After `EOWNERDEAD`, `lock_mutex` marks the mutex consistent but does not check the block list,
+  which may be half-updated if the owner died in the middle of a split/merge.
+- The shared object is never `shm_unlink`ed, so blocks leaked by a crashed run stay allocated in
+  later runs, and an object created by an older build with a different `SharedMemory` layout is
+  reused because `magic` matches. A layout version in `magic` would catch the latter.
+- The fork/exec concurrency tests do one allocation per process and never check that blocks
+  from different processes do not overlap, so they do not really exercise the mutex.
+- `.vscode/settings.json` holds a personal compiler path (`C:/msys64/...`); consider ignoring it.
+- The `my_init` wait loops count `usleep(1000)` calls, so the timeout is ~5 s on Linux but can be
+  much longer where sleeps are coarser; a `clock_gettime` deadline would be exact.

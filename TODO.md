@@ -22,7 +22,7 @@ Verification legend:
   Why: `ALIGN(SIZE_MAX - 3)` wraps to 0, so `my_malloc` returns a 0-byte block and
   `my_realloc` returns the old pointer unchanged.
   Verify: [shim] new test `test_huge_size` fails before the fix, passes after.
-- [ ] **B4. `my_free` accepts double frees and foreign pointers** - `allocator.c`, `my_free`.
+- [x] **B4. `my_free` accepts double frees and foreign pointers** - `allocator.c`, `my_free`.
   Why: a double free of a block already merged into its predecessor grows the predecessor
   over the next allocated block (overlapping allocations); a pointer outside the heap makes
   `my_free` write into unrelated memory.
