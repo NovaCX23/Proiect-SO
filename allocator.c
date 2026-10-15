@@ -185,7 +185,8 @@ int my_init()
 // Aloca un bloc de memorie folosind first-fit si split daca e nevoie
 void *my_malloc(size_t size)
 {
-    if (size == 0 || shm_info == NULL)
+    // size > MEMORY_SIZE nu poate incapea oricum; altfel ALIGN ar da overflow
+    if (size == 0 || size > MEMORY_SIZE || shm_info == NULL)
         return NULL;
 
     size_t aligned_size = ALIGN(size);
@@ -288,6 +289,9 @@ void *my_realloc(void *ptr, size_t size)
         my_free(ptr);
         return NULL;
     }
+    // Ca la my_malloc: evitam overflow in ALIGN; blocul vechi ramane valid
+    if (size > MEMORY_SIZE)
+        return NULL;
 
     Block *curr = (Block *)((char *)ptr - BLOCK_SIZE);
     size_t aligned_size = ALIGN(size);

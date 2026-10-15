@@ -2,12 +2,6 @@
 
 ## Found
 
-### B3. `ALIGN` overflow for huge sizes
-`allocator.c`, `my_malloc` / `my_realloc`: `ALIGN(SIZE_MAX - 3)` wraps around to 0.
-
-Reproduction: `my_malloc((size_t)-4)` returns a non-NULL pointer to a 0-byte block;
-`my_realloc(p, (size_t)-4)` returns `p` unchanged. Writing to either corrupts the heap.
-
 ### B4. `my_free` accepts double frees and pointers it never returned
 `allocator.c`, `my_free`.
 
@@ -58,6 +52,16 @@ is no longer silently re-initialized; it must be removed with
 `rm /dev/shm/proiect_so_allocator` (the error message says so).
 Verified on the Windows shim: build clean, single-process tests pass, a 0-byte leftover object
 gives an error instead of SIGBUS. **Not yet verified on Linux** (`test_concurrent_init`).
+
+### B3. `ALIGN` overflow for huge sizes - commit "fix: reject sizes larger than the heap before aligning"
+`allocator.c`, `my_malloc` / `my_realloc`: `ALIGN(SIZE_MAX - 3)` wraps around to 0.
+
+Reproduction: `my_malloc((size_t)-4)` returns a non-NULL pointer to a 0-byte block;
+`my_realloc(p, (size_t)-4)` returns `p` unchanged. Writing to either corrupts the heap.
+Test: `test_huge_size`.
+
+Fix: return NULL when `size > MEMORY_SIZE` before calling `ALIGN`; `my_realloc` keeps the old
+block, like the standard `realloc`. Verified on the Windows shim: test fails before, passes after.
 
 ## Suggestions
 

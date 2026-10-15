@@ -18,7 +18,7 @@ Verification legend:
   or see `magic` not yet set and run `init_shared_memory` concurrently with the creator.
   Verify: [linux] new test `test_concurrent_init` (many children call `my_init` at the same
   moment on a fresh object) passes repeatedly; [shim] build + other tests still pass.
-- [ ] **B3. `ALIGN` overflow for huge sizes** - `allocator.c`, `my_malloc` / `my_realloc`.
+- [x] **B3. `ALIGN` overflow for huge sizes** - `allocator.c`, `my_malloc` / `my_realloc`.
   Why: `ALIGN(SIZE_MAX - 3)` wraps to 0, so `my_malloc` returns a 0-byte block and
   `my_realloc` returns the old pointer unchanged.
   Verify: [shim] new test `test_huge_size` fails before the fix, passes after.
