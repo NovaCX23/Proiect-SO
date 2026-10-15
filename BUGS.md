@@ -6,7 +6,7 @@
 
 ## Fixed
 
-### B1. Mutex is not robust on Linux - commit "fix: always make the shared mutex robust"
+### B1. Mutex is not robust on Linux - fixed in 83844de
 `allocator.c`, `init_shared_memory`: `pthread_mutexattr_setrobust` is guarded by
 `#ifdef PTHREAD_MUTEX_ROBUST`. In glibc `PTHREAD_MUTEX_ROBUST` is an enum constant, not a
 macro, so the call is compiled out and the mutex is a normal (non-robust) one.
@@ -20,7 +20,7 @@ Fix: call `pthread_mutexattr_setrobust` unconditionally (POSIX.1-2008, glibc >= 
 No automated test: the public API cannot hold the lock and die on purpose.
 Verified on the Windows shim (call count 0 -> 1); on Linux check with `nm -D tests`.
 
-### B2. `my_init` race between the creator and other processes - commit "fix: make non-creator processes wait for my_init instead of re-initializing"
+### B2. `my_init` race between the creator and other processes - fixed in b3d929c
 `allocator.c`, `my_init`:
 1. The creator does `shm_open(O_CREAT | O_EXCL)` and only then `ftruncate`. Another process
    that opens the object in between maps a 0-byte object; reading `shm_info->magic` -> SIGBUS.
@@ -42,7 +42,7 @@ is no longer silently re-initialized; it must be removed with
 Verified on the Windows shim: build clean, single-process tests pass, a 0-byte leftover object
 gives an error instead of SIGBUS. **Not yet verified on Linux** (`test_concurrent_init`).
 
-### B3. `ALIGN` overflow for huge sizes - commit "fix: reject sizes larger than the heap before aligning"
+### B3. `ALIGN` overflow for huge sizes - fixed in e23d9bd
 `allocator.c`, `my_malloc` / `my_realloc`: `ALIGN(SIZE_MAX - 3)` wraps around to 0.
 
 Reproduction: `my_malloc((size_t)-4)` returns a non-NULL pointer to a 0-byte block;
@@ -52,7 +52,7 @@ Test: `test_huge_size`.
 Fix: return NULL when `size > MEMORY_SIZE` before calling `ALIGN`; `my_realloc` keeps the old
 block, like the standard `realloc`. Verified on the Windows shim: test fails before, passes after.
 
-### B4. `my_free` accepts double frees and pointers it never returned - commit "fix: reject double free and foreign pointers in my_free"
+### B4. `my_free` accepts double frees and pointers it never returned - fixed in 918b119
 `allocator.c`, `my_free`.
 
 Reproduction (double free):
